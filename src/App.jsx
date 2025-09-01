@@ -20,6 +20,8 @@ export default function App() {
             const wrapCb = document.getElementById('wrap');
             const showGridCb = document.getElementById('showGrid');
             const patternSel = document.getElementById('pattern');
+            const smoke = document.getElementById('smoke');
+            const smokeLabel = document.getElementById('smokeLabel');
 
             const genEl = document.getElementById('gen');
             const aliveEl = document.getElementById('alive');
@@ -32,7 +34,7 @@ export default function App() {
             let next = new Uint8Array(cols * rows);
             let fade = new Uint8Array(cols * rows);
             let fadeNext = new Uint8Array(cols * rows);
-            const FADE_STEPS = 3;
+            let smokeSteps = clamp(parseInt(smoke.value) || 3, 0, 50);
             let generation = 0;
             let running = false;
             let lastTs = 0, acc = 0, frames = 0, lastFpsTs = 0, fps = 0;
@@ -82,8 +84,9 @@ export default function App() {
                         if (grid[i]) {
                             ctx.fillStyle = '#9ee493';
                             ctx.fillRect(x * cellPx + 1, y * cellPx + 1, cellPx - 2, cellPx - 2);
-                        } else if (fade[i]) {
-                            ctx.fillStyle = `rgba(200,200,200,${fade[i] / (FADE_STEPS + 1)})`;
+                        } else if (smokeSteps > 0 && fade[i]) {
+                            const alpha = Math.min(fade[i], smokeSteps) / (smokeSteps + 1);
+                            ctx.fillStyle = `rgba(200,200,200,${alpha})`;
                             ctx.fillRect(x * cellPx + 1, y * cellPx + 1, cellPx - 2, cellPx - 2);
                         }
                     }
@@ -134,9 +137,9 @@ export default function App() {
                         if (alive) {
                             fadeNext[i] = 0;
                         } else if (a) {
-                            fadeNext[i] = FADE_STEPS;
+                            fadeNext[i] = smokeSteps;
                         } else {
-                            const f = fade[i];
+                            const f = Math.min(fade[i], smokeSteps);
                             fadeNext[i] = f > 0 ? f - 1 : 0;
                         }
                     }
@@ -171,7 +174,7 @@ export default function App() {
                     for (let y = 0; y < minRows; y++) {
                         for (let x = 0; x < minCols; x++) {
                             newGrid[y * newCols + x] = grid[y * cols + x];
-                            newFade[y * newCols + x] = fade[y * cols + x];
+                            newFade[y * newCols + x] = Math.min(fade[y * cols + x], smokeSteps);
                         }
                     }
                 }
@@ -238,11 +241,11 @@ export default function App() {
                 const i = idx(x, y);
                 // Left click toggles to 1; right click erases
                 if (evt.button === 2) {
-                    if (grid[i]) fade[i] = FADE_STEPS;
+                    if (grid[i]) fade[i] = smokeSteps;
                     grid[i] = 0; drawValue = 0;
                 } else {
                     if (grid[i]) {
-                        grid[i] = 0; fade[i] = FADE_STEPS;
+                        grid[i] = 0; fade[i] = smokeSteps;
                     } else {
                         grid[i] = 1; fade[i] = 0;
                     }
@@ -256,7 +259,7 @@ export default function App() {
                 const i = idx(x, y);
                 if (grid[i] !== drawValue) {
                     grid[i] = drawValue;
-                    fade[i] = drawValue ? 0 : FADE_STEPS;
+                    fade[i] = drawValue ? 0 : smokeSteps;
                     draw();
                 }
             }
@@ -288,6 +291,15 @@ export default function App() {
             density.addEventListener('input', () => { densityLabel.textContent = density.value + '%'; });
             speed.addEventListener('input', () => {
                 const v = clamp(parseInt(speed.value), 1, 60); speedLabel.textContent = v + ' Г/с'; msPerGen = 1000 / v;
+            });
+            smoke.addEventListener('input', () => {
+                smokeSteps = clamp(parseInt(smoke.value), 0, 50);
+                smokeLabel.textContent = smokeSteps ? smokeSteps + ' хода' : 'выкл';
+                for (let i = 0; i < fade.length; i++) {
+                    fade[i] = Math.min(fade[i], smokeSteps);
+                    fadeNext[i] = Math.min(fadeNext[i], smokeSteps);
+                }
+                draw();
             });
 
             function applySizeInputs(preserve = false) {
@@ -349,6 +361,7 @@ export default function App() {
           <label>Ширина (клеток): <input id="colsInput" type="number" min="10" max="400" step="1" defaultValue="80" /></label>
           <label>Высота (клеток): <input id="rowsInput" type="number" min="10" max="300" step="1" defaultValue="50" /></label>
           <label>Скорость: <input id="speed" type="range" min="1" max="60" defaultValue="12" /> <span id="speedLabel">12 Г/с</span></label>
+          <label>Дым: <input id="smoke" type="range" min="0" max="50" defaultValue="3" /> <span id="smokeLabel">3 хода</span></label>
           <label><input id="wrap" type="checkbox" defaultChecked /> Тороид (замыкать края)</label>
           <label><input id="showGrid" type="checkbox" defaultChecked /> Сетка</label>
           <label>Штамп:

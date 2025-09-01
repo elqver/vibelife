@@ -3,9 +3,10 @@ name: Deploy to GitHub Pages
 on:
   push:
     branches: [work]
+  workflow_dispatch:
 
 permissions:
-  actions: read       # <-- важно, чтобы deploy мог читать артефакты ранa
+  actions: read
   contents: read
   pages: write
   id-token: write
@@ -39,7 +40,7 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: dist  # проверь, что сборка реально кладёт сюда файлы
+          path: dist   # убедись, что твой билд пишет сюда
 
   deploy:
     needs: build

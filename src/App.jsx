@@ -30,6 +30,9 @@ export default function App() {
             let rows = clamp(parseInt(rowsInput.value) || 50, 10, 300);
             let grid = new Uint8Array(cols * rows);
             let next = new Uint8Array(cols * rows);
+            let fade = new Uint8Array(cols * rows);
+            let fadeNext = new Uint8Array(cols * rows);
+            const FADE_STEPS = 3;
             let generation = 0;
             let running = false;
             let lastTs = 0, acc = 0, frames = 0, lastFpsTs = 0, fps = 0;
@@ -72,11 +75,15 @@ export default function App() {
                 const h = rows * cellPx;
                 ctx.clearRect(0, 0, w, h);
 
-                // Cells
-                ctx.fillStyle = '#9ee493';
+                // Cells and fading smoke
                 for (let y = 0; y < rows; y++) {
                     for (let x = 0; x < cols; x++) {
-                        if (grid[idx(x, y)]) {
+                        const i = idx(x, y);
+                        if (grid[i]) {
+                            ctx.fillStyle = '#9ee493';
+                            ctx.fillRect(x * cellPx + 1, y * cellPx + 1, cellPx - 2, cellPx - 2);
+                        } else if (fade[i]) {
+                            ctx.fillStyle = `rgba(200,200,200,${fade[i] / (FADE_STEPS + 1)})`;
                             ctx.fillRect(x * cellPx + 1, y * cellPx + 1, cellPx - 2, cellPx - 2);
                         }
                     }
@@ -122,37 +129,56 @@ export default function App() {
                         const i = idx(x, y);
                         const a = grid[i];
                         const nb = neighbors(x, y);
-                        // Правила Конвея
-                        next[i] = (a ? (nb === 2 || nb === 3) : (nb === 3)) ? 1 : 0;
+                        const alive = (a ? (nb === 2 || nb === 3) : (nb === 3)) ? 1 : 0;
+                        next[i] = alive;
+                        if (alive) {
+                            fadeNext[i] = 0;
+                        } else if (a) {
+                            fadeNext[i] = FADE_STEPS;
+                        } else {
+                            const f = fade[i];
+                            fadeNext[i] = f > 0 ? f - 1 : 0;
+                        }
                     }
                 }
                 // swap
                 [grid, next] = [next, grid];
+                [fade, fadeNext] = [fadeNext, fade];
                 generation++;
             }
 
             function randomize(pct = 0.25) {
-                for (let i = 0; i < grid.length; i++) grid[i] = (Math.random() < pct) ? 1 : 0;
+                for (let i = 0; i < grid.length; i++) {
+                    grid[i] = (Math.random() < pct) ? 1 : 0;
+                    fade[i] = 0;
+                }
                 generation = 0;
             }
 
-            function clearBoard() { grid.fill(0); generation = 0; }
+            function clearBoard() { grid.fill(0); fade.fill(0); generation = 0; }
 
             function setSize(newCols, newRows, preserve = false) {
                 newCols = clamp(Math.floor(newCols), 10, 400);
                 newRows = clamp(Math.floor(newRows), 10, 300);
                 if (newCols === cols && newRows === rows) return;
                 let newGrid = new Uint8Array(newCols * newRows);
+                let newNext = new Uint8Array(newCols * newRows);
+                let newFade = new Uint8Array(newCols * newRows);
+                let newFadeNext = new Uint8Array(newCols * newRows);
                 if (preserve) {
                     const minCols = Math.min(cols, newCols);
                     const minRows = Math.min(rows, newRows);
                     for (let y = 0; y < minRows; y++) {
                         for (let x = 0; x < minCols; x++) {
                             newGrid[y * newCols + x] = grid[y * cols + x];
+                            newFade[y * newCols + x] = fade[y * cols + x];
                         }
                     }
                 }
-                cols = newCols; rows = newRows; grid = newGrid; next = new Uint8Array(cols * rows); generation = 0;
+                cols = newCols; rows = newRows;
+                grid = newGrid; next = newNext;
+                fade = newFade; fadeNext = newFadeNext;
+                generation = 0;
                 resizeCanvasToBoard();
             }
 
@@ -183,7 +209,11 @@ export default function App() {
                 if (!pts) return;
                 for (const [dx, dy] of pts) {
                     const x = cx + dx, y = cy + dy;
-                    if (x >= 0 && x < cols && y >= 0 && y < rows) grid[idx(x, y)] = 1;
+                    if (x >= 0 && x < cols && y >= 0 && y < rows) {
+                        const i = idx(x, y);
+                        grid[i] = 1;
+                        fade[i] = 0;
+                    }
                 }
             }
 
@@ -207,13 +237,28 @@ export default function App() {
                 }
                 const i = idx(x, y);
                 // Left click toggles to 1; right click erases
-                if (evt.button === 2) { grid[i] = 0; drawValue = 0; }
-                else { grid[i] = grid[i] ? 0 : 1; drawValue = grid[i]; }
+                if (evt.button === 2) {
+                    if (grid[i]) fade[i] = FADE_STEPS;
+                    grid[i] = 0; drawValue = 0;
+                } else {
+                    if (grid[i]) {
+                        grid[i] = 0; fade[i] = FADE_STEPS;
+                    } else {
+                        grid[i] = 1; fade[i] = 0;
+                    }
+                    drawValue = grid[i];
+                }
                 drawing = true; draw();
             }
             function handlePointerMove(evt) {
                 if (!drawing) return;
-                const [x, y] = posToCell(evt); grid[idx(x, y)] = drawValue; draw();
+                const [x, y] = posToCell(evt);
+                const i = idx(x, y);
+                if (grid[i] !== drawValue) {
+                    grid[i] = drawValue;
+                    fade[i] = drawValue ? 0 : FADE_STEPS;
+                    draw();
+                }
             }
             function handlePointerUp() { drawing = false; }
 

@@ -1,6 +1,7 @@
 # Vibe Life
 
 React + Vite version of Conway's Game of Life.
+[demo](https://elqver.github.io/vibelife/)
 
 ## Development
 
